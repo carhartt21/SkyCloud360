@@ -138,3 +138,20 @@ All 360° parameters can be set in `config/config.yaml` or via command-line over
 ├── models/               # Backbone architectures (ResNet, MobileNet)
 └── weights/              # Pretrained model weights
 ```
+
+## Citation
+
+If you use this code or dataset in your research, please cite:
+
+```bibtex
+@INPROCEEDINGS{11200399,
+  author={Gerhardt, Christoph and Broll, Wolfgang},
+  booktitle={2025 10th International Conference on Image, Vision and Computing (ICIVC)}, 
+  title={SkyCloud360: Sky and Cloud Segmentation in Equirectangular Images}, 
+  year={2025},
+  volume={},
+  number={},
+  pages={48-58},
+  keywords={Image analysis;Clouds;Semantic segmentation;Image edge detection;Neural networks;Weather forecasting;Solar energy;Semisupervised learning;Distortion;Monitoring;Semantic segmentation;scene understanding;image analysis;neural networks;datasets},
+  doi={10.1109/ICIVC66358.2025.11200399}}
+```
