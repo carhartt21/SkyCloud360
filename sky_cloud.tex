@@ -1,0 +1,434 @@
+% \documentclass[10pt,twocolumn,letterpaper]{article}
+\documentclass[conference]{IEEEtran}
+% \usepackage{iccv}
+\usepackage{tikzscale}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage[inline]{enumitem}
+\usepackage{makecell}
+\usepackage{numprint}
+\npthousandsep{,}
+% \usepackage{subfig}
+\usepackage{subcaption}
+% \usepackage{subtable}
+\usepackage{tikz}
+\usepackage{textcomp}
+\usepackage{xcolor}
+% \usepackage{nicefrac}
+\usepackage{multirow}
+\usepackage[export]{adjustbox}
+% microtype for improved typesetting
+\usepackage{microtype}
+% sectsty for title case in section headings
+% \usepackage{sectsty}
+% \usepackage{titlecaps}
+% \allsectionsfont{\titlecap}
+\usepackage{gensymb}
+
+
+\usepackage{hyperref}
+
+\usepackage{pifont}% http://ctan.org/pkg/pifont
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
+
+% put all the external documents here!
+
+\definecolor{myGreen}{RGB}{152,251,152}
+\definecolor{myBlue}{RGB}{179,236,255}
+\definecolor{myGray}{RGB}{180,180,180}
+
+
+\setlength{\textfloatsep}{0.15cm}
+\newlist{inlinelist}{enumerate*}{1}
+\setlist[inlinelist]{label=(\roman*), itemjoin={{, }}, itemjoin*={{, and }}}
+
+\ifCLASSOPTIONcompsoc
+    \usepackage[caption=false, font=normalsize, labelfont=sf, textfont=sf]{subfig}
+\else
+\usepackage[caption=false, font=footnotesize]{subfig}
+\fi
+
+% Pages are numbered in submission mode, and unnumbered in camera-ready
+\pagestyle{empty}
+
+\def\httilde{\mbox{\tt\raisebox{-.5ex}{\symbol{126}}}}
+
+% \usepackage{hyperref}
+% \hypersetup{
+%     colorlinks=true,uu
+%     linkcolor=blue,
+%     filecolor=magenta,     
+%     citecolor=black,
+%     urlcolor=blue
+%     }
+    
+% Support for easy cross-referencing
+\usepackage[capitalize]{cleveref}
+% \crefname{section}{Sec.}{Secs.}
+% \Crefname{section}{Section}{Sections}
+% \Crefname{table}{Table}{Tables}
+% \crefname{table}{Tab.}{Tabs.}
+
+% \usepackage{draftwatermark}
+% \SetWatermarkText{Author Version}
+% \SetWatermarkScale{.5}
+
+\begin{document}
+
+%%%%%%%%% TITLE
+% \title{SkyCloud: Sky and Cloud Segmenation in the Wild} %short
+%or
+
+\title{SkyCloud360: Sky and Cloud Segmentation in Equirectangular Images} %long
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Christoph Gerhardt}
+\IEEEauthorblockA{\textit{Ilmenau University of Technology}\\
+Ilmenau, Germany \\
+christoph.gerhardt@tu-ilmenau.de}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Wolfgang Broll}
+\IEEEauthorblockA{\textit{Ilmenau University of Technology}\\
+Ilmenau, Germany \\
+wolfgang.broll@tu-ilmenau.de}
+}
+
+\maketitle
+\thispagestyle{empty}
+
+%%%%%%%%% ABSTRACT
+\begin{abstract}
+\noindent 
+Image-based sky and cloud segmentation is a promising area of research in computer vision, with applications ranging from climate monitoring and weather forecasting to outdoor scene understanding and autonomous navigation. 
+Existing approaches focus on segmenting sky and cloud regions in natural images using supervised and semi-supervised learning techniques.
+These methods have demonstrated success in identifying clear skies, thin clouds, and thick clouds under controlled conditions. However, existing methods typically rely on perspective images, which only capture a limited field of view.
+The emergence of 360° imagery provides an opportunity to overcome these limitations by offering a complete spherical view of the environment. 
+This panoramic perspective is particularly beneficial for applications requiring comprehensive spatial context, such as solar energy forecasting.
+However, processing equirectangular images introduces unique challenges due to geometric distortions, varying pixel densities across latitudes, and wrap-around boundaries at the edges of the projection.
+To address these challenges, we present a novel approach for sky and cloud segmentation in equirectangular images. 
+As part of this work, we introduce a dataset comprising 600 high-resolution equirectangular images with dense annotations for sky and cloud segmentation. We evaluate multiple adaptations of the previously proposed SkyCloudNet architecture, including tangent plane projections and equirectangular convolutions, to handle the geometric distortions inherent in 360° imagery. Furthermore, we benchmark state-of-the-art methods for semantic segmentation in 360° images and unsupervised domain adaptation to explore their effectiveness in this domain.
+Our findings highlight the potential of advanced segmentation techniques to handle the complexities of equirectangular images while providing insights into the limitations and opportunities for future research in panoramic sky and cloud segmentation.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Semantic segmentation, scene understanding, image analysis, neural networks, datasets
+\end{IEEEkeywords}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%segmentaion
+\section{Introduction}
+% {\def\thefootnote{}\footnotetext{2023 IEEE. This is the author’s version of the article that has been published in the proceedings of 8th International Conference on Image, Vision and Computing (ICIVC) conference. The final version of this record is available at \href{https://doi.org/10.1109/ICIVC58118.2023.10270450}{https://doi.org/10.1109/ICIVC58118.2023.10270450}}}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Clouds play a pivotal role in the Earth's climate system, simultaneously cooling the planet by reflecting incoming solar radiation and warming it by trapping outgoing infrared radiation. 
+This delicate balance depends on cloud altitude, thickness, and global distribution patterns. 
+Low clouds, with their high reflectivity and minimal impact on escaping infrared radiation, generally provide a net cooling effect. However, as demonstrated by recent satellite observations, decreasing low cloud cover has allowed more solar radiation to reach Earth's surface, accelerating warming beyond model predictions \cite{goessling2025recent}.
+As we face global warming, developing robust cloud monitoring networks and integrating these observations into climate models becomes increasingly urgent.
+One way of addressing this problem is by leveraging image-based monitoring systems.
+In addition to climate change monitoring, information on clouds and cloud coverage can be used for solar energy measurements and predictions \cite{stephens2005} or weather forecasting \cite{Chu2018}. 
+In all these use cases, having detailed and expressive data is crucial. 
+For example, weather forecasting models require large amounts of dynamic data to form accurate predictions \cite{kunjumon2018, fathi2021}.
+
+However, most current cloud data collection systems are based on ground-based wide-angle cameras \cite{swimseg, cloudsegnet} or satellite images \cite{morales2019end, mohajerani2019}. 
+While such images can comprehensively capture a large sky area, the restriction to specific hardware limits scalability (i.e., wide-angle cameras) or the data has a rather low resolution (i.e., satellites). 
+The advent of 360° imaging technology offers a promising solution by capturing the entire sky and surrounding environment in a single image, providing comprehensive scene capture.
+
+The use of 360° images introduces unique challenges due to spherical distortions and wrap-around edges. 
+These challenges require specialized processing techniques to maintain consistency across the whole image. 
+To address these challenges, we present an extension of our previous work, focusing on sky and cloud segmentation in 360° equirectangular images. Our approach leverages a multi-task neural network architecture that incorporates environmental attributes and utilizes equirectangular-aware techniques to handle the geometric distortions inherent in panoramic images.
+
+We introduce the SkyCloud360 dataset, consisting of 600 high-resolution equirectangular images with dense annotations for sky and cloud segments, along with sun position estimates. 
+This dataset enables comprehensive evaluation of segmentation models in the context of cloud segmentation in 360° imagery. Our contributions include:
+
+\begin{itemize}
+    \item Optimized versions of the SkyCloudNet architecture adapted for equirectangular images.
+    \item The SkyCloud360 dataset—the first benchmark dataset for sky and cloud segmentation in equirectangular images, comprising 600 high-resolution images with dense annotations and sun position estimates.
+    \item Comprehensive evaluation of state-of-the-art approaches for semantic segmentation and domain adaptation in sky and cloud segmentation of equirectangular images.
+\end{itemize}
+
+The SkyCloud360 dataset and the PyTorch implementation of the SkyCloudNet adaptations are publicly available \footnote{https://github.com/carhartt21/SkyCloud360}
+, providing a foundation for future research in panoramic image analysis. 
+
+
+% https://osf.io/y69ah/?view_only=889215916ccb4c52a5971fffc6af0dda
+ 
+ 
+% \begin{figure}[tb]
+% 	\centering
+% 	\includegraphics[width=\linewidth]{figures/examples.png}
+% 	\caption{Exemplary images from the sky and cloud detection data set presented in this paper.}
+% 	\label{fig:examples}
+% \end{figure}   
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related work}\label{sec:related_work}
+
+\subsection{Datasets for Outdoor Semantic Segmentation, Cloud Segmentation and Equirectangular Images}
+\label{sec:rw_data}
+Semantic segmentation datasets for outdoor environments have evolved along three primary axes: general scene understanding, specialized atmospheric analysis, and panoramic imagery processing. The Pascal VOC 2012 dataset \cite{everingham2010} established early benchmarks for general outdoor/indoor segmentation, though lacking specific sky and cloud annotations. Subsequent large-scale efforts like Cityscapes \cite{cityscapes} and OUTSIDE15k \cite{gerhardt2021outside} advanced urban scene understanding but maintained a limited focus on sky regions.
+
+For atmospheric analysis, dedicated cloud segmentation datasets emerged with specialized labeling strategies. SegCloud \cite{martins2020} introduced 400 whole-sky images with cloud/sky masks, while SWIMSEG \cite{sheth2023} expanded this to 1,013 solar-optimized samples. The SWINySEG \cite{cloudsegnet} dataset (6,768 images) further enhanced temporal resolution for cloud dynamics analysis. 
+Recent advancements include self-supervised learning approaches for semantic cloud segmentation of ground-based all-sky images, which can provide high-resolution cloud coverage information for distinct cloud types. 
+However, all of these collections remain limited to narrow field-of-view imagery with sky-only content.
+
+Panoramic datasets initially focused on indoor environments, exemplified by Matterport \cite{matterport2017} and 360-Indoor \cite{chou2020360}. 
+The recent DensePASS \cite{densepass} and CVRG Pano \cite{seg_natural_outdoor_scenes} datasets extend panoramic segmentation to outdoor scenes, but lack detailed cloud annotations.
+Similarly, the SkyFinder dataset, while providing a large collection of sky-specific segmentation labels, remains constrained to sky and ground separation.
+Synthetic data can play an increasingly vital role, with SynPASS \cite{zhang2022behind} demonstrating the potential of generated content for domain adaptation.
+
+The summary of our analysis in \autoref{tab:datasets} reveals that no existing dataset combines equirectangular images with detailed cloud labeling annotations.
+The SkyCloud360 dataset addresses this gap through 600 high-resolution equirectangular images with pixel-level annotations for sky, two cloud types, and terrain, enabling comprehensive evaluation of spherical segmentation methods across diverse meteorological conditions.
+
+\input{tables/table_datasets}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Sky and Cloud Segmentation} 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+While sky segmentation has frequently served as an auxiliary task in applications like scene understanding \cite{tsai2016} and weather classification \cite{liu2017single}, it has rarely been the primary focus in panoramic contexts. 
+The introduction of the Skyfinder dataset \cite{skyfinder} marked a turning point with \numprint{90000} webcam images, though limited to perspective views from 53 static cameras. 
+Subsequent improvements using RefineNet \cite{place2019} and adaptive traditional methods \cite{nice2020sky} revealed critical gaps in handling spherical distortion and dynamic environmental conditions. 
+General-purpose segmentation networks \cite{pspnet, segformer} lack explicit mechanisms for equirectangular geometry, while augmentation strategies \cite{sakaridis2018model} prove inadequate for diverse meteorological scenarios. 
+Our work addresses these limitations through distortion-aware architectures specifically designed for sky analysis in equirectangular images.
+
+Traditional cloud segmentation relies on thresholding sky-only images \cite{heinle2010, calbo2008}, limiting applicability to pre-cropped inputs. Recent deep learning approaches like U-Net variants \cite{dev2019} maintain this constraint, despite improvements in local threshold adaptation \cite{liu2014automatic}.
+
+Our work builds upon the SkyCloudNet architecture \cite{gerhardt2023skycloud}, which introduced a multi-task approach for simultaneous sky and cloud segmentation in perspective images. SkyCloudNet employs a shared encoder-decoder backbone with task-specific heads for sky segmentation, cloud type classification, and environmental attribute estimation. 
+Task-specific heads branch from the final decoder layer, with the cloud segmentation head receiving additional input from the sky segmentation branch to maintain focus on relevant regions.
+In this paper, we extend SkyCloudNet through geometric adaptation strategies specifically designed for equirectangular images. 
+These adaptations address the fundamental challenges of spherical distortion while preserving the multi-task capabilities of the original architecture. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Semantic segmentation in equirectangular images}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+
+The emergence of panoramic imaging introduced new challenges in the field of outdoor segmentation addressed through three main strategies: projection conversion (e.g., cubemaps \cite{gerhardt2020neural, eder2019convolutions, may2023cubegan} or tangent images \cite{li2022omnifusion, yang2020omnisupervised, eder2020tangent}), distortion-aware convolutions \cite{tateno2018distortion, orhan2022semantic}, and domain adaptation techniques \cite{zhang2022behind, tian2024self, liu2021source, zheng2024semantics, zheng2023both}. 
+Recent work in open-vocabulary segmentation \cite{zheng2024open} has enabled broader class recognition, while foundation models like SAM \cite{kirillov2023segment} show promise for zero-shot capabilities. 
+However, existing panoramic methods focus primarily on street scenes rather than sky and cloud analysis, leaving a critical gap in environmental monitoring applications. 
+Our work bridges this divide by extending sky and cloud segmentation to equirectangular imagery by evaluating different architectural adaptations and various state-of-the-art approaches on our proposed benchmark datasets.
+
+\section{SkyCloud360 Dataset\label{sec:data_set}}
+\input{tables/class_statistics}
+% \subsection{Cloud Segmentation}\label{sec:cloud_data_set}
+The rapid advancement of panoramic imaging technologies has created new opportunities and challenges in atmospheric monitoring and analysis. 
+However, as highlighted in Section \ref{sec:rw_data}, there is a critical absence of suitable datasets for cloud segmentation in equirectangular imagery.
+
+To address this limitation, we introduce the SkyCloud360 dataset, a comprehensive collection of 600 high-resolution panoramic images with fine-detailed sky and cloud segmentation labels. 
+
+The SkyCloud360 dataset builds upon the CVRG-Pano dataset \cite{orhan2022semantic}, which offers a rich source of panoramic outdoor scenes. 
+For annotation, we adopted a ternary atmospheric classification approach with labels for \textit{sky}, \textit{thin clouds}, and \textit{thick clouds}, following conventions established in the SkyCloud \cite{gerhardt2023skycloud} and HYTA \cite{hyta2} datasets.
+
+The distinction between cloud types serves critical applications in climate monitoring and solar energy forecasting. Thin clouds primarily represent high-altitude formations composed of ice crystals (cirrus, cirrocumulus, cirrostratus), while thick clouds denote water droplet formations at low and medium altitudes (altocumulus, stratocumulus, stratus). To ensure consistent annotation despite the subjective nature of cloud classification, we established clear labeling guidelines:
+
+\begin{itemize}
+\item \textit{Thick cloud}: Applied when the sky behind the cloud is not visible
+\item \textit{Thin cloud}: Used when the sky is clearly visible through the cloud and the cloud has a visible structure distinguishing it from the surrounding sky
+\item \textit{Sky}: Includes clear sky and atmospheric phenomena like haze or smog
+\end{itemize}
+
+To maximize annotation quality, we implemented a two-round labeling process. Initial annotations were created by multiple annotators, followed by a comprehensive review and refinement by a single expert annotator to ensure consistency across the entire dataset.
+In addition to semantic labels, SkyCloud360 provides labels for the estimated sun position. 
+While not directly utilized in the current study, these annotations enable future research in illumination-aware segmentation, light source estimation, and atmospheric scattering analysis. 
+The sun position data could prove particularly valuable for addressing the solar glare misclassification issues identified in Section~\ref{sec:limitations}, where regions near the sun exhibit challenging illumination patterns.
+
+Table~\ref{tab:dataset_stats} presents the class distribution statistics for SkyCloud360.
+To the best of our knowledge, the \textit{SkyCloud360} dataset is the only dataset with cloud labels for equirectangular images.   
+However, it is essential to note that the dataset is primarily intended for evaluation purposes, as the number of images is not well suited for traditional neural network training. 
+Consequently, we do not use the dataset in our training stage, but only in our analysis in \cref{sec:eval} and hope that our results foster future developments in this research area.
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+% \section{Neural Network Architecture}\label{sec:network}
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+% In this section, we discuss adaptation techniques that aim to improve the performance of SkyCloudNet on equirectangular
+
+
+% We present the results of alternative architectures in the ablation study in \cref{sec:ablation}. 
+% In the following, we discuss the single components shown in \cref{fig:network}.
+
+\input{method}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+\subsection{Implementation Details} \label{sec:training}
+Before feeding an image to the network, we preprocess the data by normalizing the color space and transforming pixel values to the range \([0, 1]\). Following this, we normalize each color channel using statistical values derived from the \textit{ImageNet} dataset \cite{imagenet}. These preprocessing steps ensure consistency in input data and improve model convergence during training.
+For training, we employ a polynomial learning rate schedule, starting with an initial learning rate of \(0.02\) and a decay power of \(0.9\). The momentum and weight decay parameters are set to \(0.9\) and \(0.0001\), respectively. For gradient optimization, we use the Stochastic Gradient Descent (SGD) algorithm \cite{sgd}, which has proven effective for semantic segmentation tasks.
+To enhance generalization, we apply random data augmentation techniques during training, including cropping, horizontal flipping, and resizing. These augmentations help the model learn robust features by exposing it to diverse variations in the input data.
+We initialize the network with pretrained weights from SkyCloudNet \cite{gerhardt2023skycloud}, leveraging its strong performance on related tasks. To focus on sky and cloud segmentation, we freeze the weights of the attribute estimation head during training.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%		
+\section{Evaluation}\label{sec:eval}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+In this section, we evaluate the performance of our described adaption techniques using the SkyCloud360 dataset (cf. \cref{sec:data_set}).
+All tests were performed on a workstation with a \textit{NVIDIA\textregistered\ Quadro RTX 6000} GPU and an \textit{Intel\textregistered\ Xeon Gold 6148} processor. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Sky Segmentation}\label{subsec:skysegmentation}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{tables/skysegmentation}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+We initially tested a selection of existing semantic segmentation approaches using the CityScapes dataset for training. Selection criteria for the approaches was the availability of publicly accessible training code or available code for testing along with pretrained weights for the CityScapes dataset. While the CityScapes dataset provides a solid foundation for general semantic segmentation tasks, its urban focus and perspective image format present limitations when transferring to equirectangular sky imagery. The domain gap between urban street scenes and atmospheric phenomena necessitated further refinement of our evaluation strategy.
+
+Therefore, we performed a second round of evaluation by training the 10 best-performing architectures using the Mapillary Vistas dataset. This dataset offers greater diversity in outdoor scenes with varying weather conditions and sky regions, providing a more suitable foundation for sky and cloud segmentation. The architectures were trained using standard protocols with learning rate scheduling and data augmentation techniques adapted for outdoor scene understanding.
+
+In addition, we used the SynPASS dataset to evaluate the capabilities of the architectures to bridge the synthetic-to-real domain gap.
+This assessment is particularly relevant for equirectangular imagery, where obtaining large-scale annotated real-world data remains challenging.
+The synthetic panoramic scenes in SynPASS, with their precise sky annotations, allow us to quantify each architecture's ability to generalize from synthetic training data to real-world test scenarios.
+
+We use pixel-wise accuracy and \textit{intersection over union} (IoU) as performance measures.
+Pixel-wise accuracy represents the ratio of correctly classified pixels to the number of total pixels in percent.
+\textit{IoU} represents the ratio of the area of overlap and the area of union between the predicted segmentation labels and the ground truth.
+The \textit{mean IoU} (mIoU) states the average \textit{IoU} over all classes.
+
+\autoref{tab:skyseg} presents comprehensive results for sky segmentation across multiple state-of-the-art methods and our proposed adaptations. The evaluation encompasses models trained on both CityScapes and Mapillary Vistas datasets, providing insights into domain transfer capabilities for equirectangular sky segmentation.
+
+Among existing methods, transformer-based architectures demonstrate superior performance, with DAFormer~\cite{hoyer2022daformer} achieving the highest mIoU when trained on CityScapes and DPPASS~\cite{zheng2023both} when trained on Mapillary Vistas. 
+Domain adaptation approaches like DATR~\cite{zheng2023look} and Trans4PASS~\cite{zhang2022bending} also perform well, indicating the importance of addressing domain shift when processing equirectangular imagery. The consistent performance gap between CityScapes and Mapillary Vistas training highlights the latter's advantage in providing more diverse sky appearances and lighting conditions.
+
+Our proposed SkyCloudNet variants demonstrate significant improvements over the baseline architecture. The standard SkyCloudNet achieves moderate performance (mIoU 0.8026 on CityScapes, 0.8108 on Mapillary Vistas), comparable to mid-tier existing methods. However, the geometric adaptations yield substantial gains, with SkyCloudNet-TPP (tangent plane projection) achieving the highest overall performance on Mapillary Vistas (mIoU 0.8514). This represents a 5.0\% improvement over the baseline model and competes with state-of-the-art methods.
+
+The extended cubemap approach (SkyCloudNet-ECM) demonstrates strong performance with mIoU scores of 0.8276 and 0.8366 on CityScapes and Mapillary Vistas respectively. This suggests that both projection strategies effectively address equirectangular distortion, with slight advantages in different training regimes. The equirectangular convolution variant (SkyCloudNet-EQC) performs slightly lower than projection-based approaches but still exceeds the baseline, achieving mIoU scores of 0.8248 and 0.8317.
+
+Notably, the performance gap between CityScapes and Mapillary Vistas training is significantly smaller for our geometric adaptations compared to existing methods. This indicates that our approaches better generalize across domains, reducing dependency on dataset-specific features. The standard cubemap approach (SkyCloudNet-CM) shows the smallest improvement over the baseline, suggesting that more sophisticated geometric handling is necessary for optimal performance.
+\input{tables/synpass}
+Table~\ref{tab:synpass} presents the performance of various models trained on the synthetic SynPASS dataset and evaluated on our real-world SkyCloud360 dataset, providing insights into synthetic-to-real domain adaptation capabilities. Among existing methods, DAFormer~\cite{hoyer2022daformer} achieves the highest mIoU, while 360SFUDA~\cite{zheng2024semantics} demonstrates the highest accuracy, suggesting different strengths in overall classification versus boundary precision.
+
+Transformer-based architectures generally outperform CNN-based approaches in this cross-domain scenario, with Trans4PASS~\cite{zhang2022bending} and DPPASS-T~\cite{zheng2023both} showing robust performance (80.98\% and 80.45\% accuracy respectively). Our baseline SkyCloudNet exhibits lower performance (72.11\% accuracy, 0.6298 mIoU) when trained on synthetic data, indicating challenges in bridging the synthetic-to-real domain gap. However, the equirectangular convolution adaptation (SkyCloudNet-EQC) yields a significant improvement (76.45\% accuracy, 0.6932 mIoU) when applied during both training and inference.
+
+This demonstrates that geometry-aware processing enhances cross-domain generalization by focusing on structural rather than textural features, particularly when the distortion patterns are consistently handled across synthetic training and real-world testing. The 4.34\% accuracy improvement and 10.07\% mIoU gain highlight the importance of addressing equirectangular distortion throughout the entire pipeline when transferring from synthetic panoramic data to real-world applications. Nevertheless, the performance gap between our approach and specialized domain adaptation methods like 360SFUDA indicates that geometric adaptations alone cannot fully bridge the synthetic-to-real gap, suggesting potential benefits from combining our geometric processing with explicit domain adaptation techniques.
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+% %%%%%%%%%%%%%%%%%%%%%%%%
+
+\input{fig/examples}
+
+% \begin{figure*}[tb]
+%     \centering
+%     \begin{tikzpicture}
+%         \node[inner sep=0] at (0,0,0) (in_1) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/input_1.jpg}};
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (in_1.east) (pred_1) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/pred_1.png}};
+%         \node[anchor=west, inner sep=0, shift = ({0.05 ,0,0})] at (pred_1.east) (gt_1) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/gt_1.png}};
+        
+%         \node[anchor=west, inner sep=0, shift = ({0.3,0,0})] at (gt_1.east) (in_2) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/input_5.jpg}};
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (in_2.east) (pred_2) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/pred_5.png}};        
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (pred_2.east) (gt_2) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/gt_5.png}};
+        
+%         \node[anchor=north, inner sep=0, shift = ({0,-0.2,0})] at (in_1.south) (in_3) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/input_3.jpg}};
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (in_3.east) (pred_3) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/pred_3.png}};        
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (pred_3.east) (gt_3) {\includegraphics[width=0.161\linewidth, trim = {100 75 0 0}, clip]{figures/fig_comp/gt_3.png}};        
+        
+%         \node[anchor=west, inner sep=0, shift = ({0.3,0,0})] at (gt_3.east) (in_4) {\includegraphics[width=0.161\linewidth, trim = {100 25 0 50}, clip]{figures/fig_comp/input_2.jpg}};
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (in_4.east) (pred_4) {\includegraphics[width=0.161\linewidth, trim = {100 25 0 50}, clip]{figures/fig_comp/pred_2.png}};
+%         \node[anchor=west, inner sep=0, shift = ({0.05,0,0})] at (pred_4.east) (gt_4) {\includegraphics[width=0.161\linewidth, trim = {100 25 0 50}, clip]{figures/fig_comp/gt_2.png}};      
+%     \end{tikzpicture}
+%     \caption{Examples for sky \& cloud segmentation using images from the \textit{SkyCloud} dataset. From left to right for each triple: input, prediction, ground truth. Labels: \textit{\textcolor{myGreen}{green}} - non-sky, \textit{\textcolor{myBlue}{blue}} - sky, \textit{white} - thick cloud, \textit{\textcolor{myGray}{gray}} - thin cloud.}
+%     \label{fig:cloud_results}
+% \end{figure*}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%5
+\subsection{Cloud Segmentation}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{tables/cloudsegmentation}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+In this section, we evaluate the cloud segmentation performance of selected networks on our SkyCloud360 dataset.
+All models were trained using the SkyCloud dataset \cite{gerhardt2023skycloud}, which contains 350 high-resolution images with pixel-level annotations for sky, thin clouds, and thick clouds.
+The evaluation follows a two-stage approach: first assessing 3-class segmentation (terrain, sky, cloud), then analyzing the more challenging 4-class task that distinguishes between thin and thick cloud types.
+
+Table~\ref{tab:cloudseg} presents the quantitative results.
+Among existing methods, DAFormer \cite{hoyer2022daformer} achieves the highest mIoU (0.7864) in 3-class segmentation despite not having the highest accuracy, indicating better handling of class imbalance.
+The 360SFUDA approach \cite{zheng2024semantics} demonstrates high accuracy (88.25\%), likely due to its domain adaptation capabilities that help bridge the gap between perspective and equirectangular imagery.
+
+Our proposed SkyCloudNet variants show competitive performance, with SkyCloudNet-TPP (tangent plane projection) achieving the best overall accuracy (88.58\%) and a strong mIoU (0.7552) among our approaches. This represents a 4.89\% accuracy improvement over the baseline SkyCloudNet. The equirectangular convolution variant (SkyCloudNet-EQC) performs slightly lower but still outperforms many existing methods.
+These results demonstrate that geometric adaptations significantly enhance cloud detection in equirectangular imagery.
+
+The second evaluation stage focuses on 4-class segmentation (terrain, sky, thin clouds, thick clouds), representing a substantially more challenging task due to the continuous nature of cloud opacity. As expected, performance metrics decrease across all methods when moving to this finer-grained classification task.
+
+360SFUDA in the overall comparison and SkyCloudNet-TPP for the SkyCloudNet adaptations maintain their leading positions.
+The consistent performance of the tangent plane projection approach across both evaluation stages suggests that this geometric adaptation effectively preserves the subtle texture and opacity cues necessary for cloud type differentiation.
+
+Notably, the performance gap between our geometric adaptations and existing methods narrows in the 4-class segmentation task. While DAFormer leads in 3-class segmentation mIoU (0.7864), it maintains strong performance in the 4-class scenario (0.6806 mIoU). This indicates that transformer-based architectures effectively capture the hierarchical features needed for fine-grained cloud classification.
+
+The relative performance of our geometric adaptations provides insights into their effectiveness for cloud segmentation.
+The tangent plane projection consistently outperforms other approaches, likely due to its ability to maintain consistent sampling density across the sphere while minimizing distortion.
+The extended cubemap (SkyCloudNet-ECM) shows moderate improvement over the standard cubemap, while equirectangular convolutions offer a good balance between accuracy and implementation simplicity.
+\autoref{fig:cloudseg} presents qualitative results from the top-performing methods.
+
+Our findings demonstrate that explicitly addressing equirectangular distortion through geometric adaptations yields substantial improvements for cloud segmentation, particularly when differentiating between cloud types.
+The tangent plane projection approach provides the most consistent performance gains, suggesting that local perspective processing with global spherical aggregation effectively captures the complex patterns needed for atmospheric analysis in panoramic imagery.
+
+\input{fig/errors}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Limitations and Error Analysis}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% In this section we will address limitations of this paper and typical errors we encountered. 
+\label{sec:limitations}
+
+Despite the promising results achieved by our approach, several limitations and error patterns warrant discussion. These insights not only contextualize our current findings but also provide direction for future research in equirectangular sky and cloud segmentation.
+
+\subsection{Dataset Limitations}
+
+A primary constraint lies in the limited training data available for cloud segmentation. Our model relies on only 350 images from the SkyCloud dataset, which restricts the network's ability to generalize across diverse cloud formations and atmospheric conditions. While our geometric adaptations partially mitigate this limitation, the relatively small sample size remains a fundamental challenge for robust cloud type classification in panoramic imagery.
+
+The SkyCloud360 dataset, while novel in its equirectangular format, exhibits limited scene variation. 
+Notably absent are winter scenes with snow-covered landscapes, low-light conditions such as dawn and dusk, and adverse weather conditions like rain and fog.
+
+Ground-truth label quality presents another inherent limitation. 
+Cloud labeling is intrinsically subjective, particularly at the boundaries between thin and thick cloud formations where no discrete threshold exists. 
+The continuous nature of cloud opacity creates numerous edge cases where even expert annotators may disagree. 
+
+\subsection{Typical Error Patterns}
+
+Our error analysis reveals several recurring failure modes, as illustrated in Figure~\ref{fig:error}. 
+As shown in Figure~\ref{fig:error}(a), the network occasionally misclassifies sky reflections in windows and water surfaces as actual sky regions. 
+This confusion stems from the similar color and texture patterns between the sky and its reflections, particularly challenging in urban environments with glass facades.
+
+Figure~\ref{fig:error}(b) demonstrates how areas near the sun with strong illumination gradients often lead to misclassifications. Further analysis of the solar glare error pattern revealed a significant correlation between segmentation accuracy and proximity to the sun's position in the sky. By incorporating sun position estimation into our evaluation framework, we identified regions within a 15° angular radius of the estimated solar position as particularly problematic for cloud classification. These areas exhibit complex light scattering phenomena that create illumination gradients easily confused with thin cirrus formations. When excluding these solar-adjacent regions from our evaluation metrics, we observed substantial performance improvements: average accuracy increased by 2.3\% and mIoU by 0.021 across the geometric adaptation strategies to SkyCloudNet. 
+This finding suggests that solar glare represents a distinct challenge class that may benefit from specialized treatment. 
+Future work could explore physics-informed regularization that incorporates solar position as an explicit input feature, potentially enabling the network to learn atmospheric scattering patterns rather than mistaking them for cloud formations. 
+Alternatively, a dedicated solar region segmentation branch could isolate these areas for specialized processing with adaptive confidence weighting based on solar elevation and atmospheric conditions.
+
+In addition, power lines, antennas, and similar thin structures overlapping the sky frequently cause segmentation errors, as shown in Figure~\ref{fig:error}(c). The network's receptive field sometimes fails to capture these fine details, especially in equirectangular format where distortion varies with latitude.
+
+These error patterns highlight the challenges in panoramic sky and cloud segmentation that extend beyond geometric distortion handling. The complex interplay between illumination, atmospheric conditions, and scene geometry creates edge cases that require specialized attention in future work.
+
+\subsection{Architectural Considerations}
+
+While our geometric adaptations effectively address equirectangular distortion, they introduce additional computational complexity. The tangent plane projection approach increases memory requirements by ca. 22\% compared to standard processing, potentially limiting deployment on resource-constrained devices. Similarly, the equirectangular convolution approach, while efficient in theory, requires careful implementation to maintain real-time performance on standard hardware.
+
+These limitations and error patterns provide valuable insights for future research directions, including specialized attention mechanisms for challenging regions, physics-informed regularization for atmospheric phenomena, and more diverse panoramic datasets spanning all seasons and lighting conditions.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+\section{Conclusion and Future Work}\label{sec:conclusion}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+% With \textit{SkyCloud360}, we presented a dataset for sky and cloud segmentation in equirectangular images. 
+% We use the dataset to evaluate different adaption techniques for the use of SkyCloudNet with equirectangular and compare the results with existing network architectures. 
+
+% In times of climate change and energy shortages, precise, fine-grained, and ubiquitous data are essential for scientific, regulatory, and executive entities to make informed decisions.
+% \textit{SkyCloud360} promises to substantially contribute in this regard by enabling large-scale data collection on environmental attributes, sky, and clouds.
+% Next to that, other applications like image stylization, or robot and drone navigation toolkits can benefit from the increased accuracy of the sky segmentation provided by \textit{SkyCloudNet}. 
+
+% In the future, we plan to investigate the applicability of \textit{SkyCloudNet} in these use cases.
+% In addition to that, we aim to add more scenes from currently underrepresented environmental conditions (e.g., \textit{winter}, \textit{rain}, or \textit{fog}) to the \textit{SkyCloud} dataset.
+% Also, we want to increase the number of classes in the cloud segmentation labels, at best matching cloud families or even types to further increase its applicability to real-life problems such as climate monitoring. 
+
+This paper presents SkyCloud360, the first comprehensive dataset for sky and cloud segmentation in equirectangular images, addressing a critical gap in panoramic atmospheric analysis. 
+Our evaluation of multiple adaptation techniques for SkyCloudNet demonstrates that specialized approaches for handling spherical distortion significantly improve segmentation performance in 360° imagery. 
+Among these, the tangent plane projection (SkyCloudNet-TPP) achieved the highest accuracy for both sky segmentation (93.63\% accuracy) and cloud classification (85.46\% accuracy).
+
+The comparative analysis of different adaptation strategies reveals important trade-offs between computational complexity and segmentation accuracy.
+While equirectangular convolutions (SkyCloudNet-EQC) offer a good balance between performance and implementation simplicity, the tangent plane projection provides superior handling of polar regions and boundaries.
+
+In times of climate change and energy shortages, precise, fine-grained, and ubiquitous data are essential for scientific, regulatory, and executive entities to make informed decisions.
+\textit{SkyCloud360} promises to substantially contribute in this regard by enabling large-scale data collection on environmental attributes, sky, and clouds.
+
+For future work, we plan to investigate the applicability of SkyCloudNet in these diverse use cases. 
+We aim to expand the SkyCloud360 dataset with more scenes from currently underrepresented environmental conditions (e.g., winter, rain, or fog) to improve robustness across all weather scenarios. 
+Additionally, we intend to increase the granularity of cloud segmentation labels to match specific cloud families or even types, further enhancing applicability to real-life problems such as climate monitoring and solar energy forecasting. 
+The integration of sun position data, already included in our dataset but not utilized in the current study, presents another promising direction for addressing illumination-dependent segmentation challenges.
+Finally, combining our geometric adaptations with explicit domain adaptation techniques could further bridge the gap between synthetic and real data, potentially enabling fully automated training pipelines that leverage both sources. 
+As panoramic imaging becomes increasingly accessible, we believe SkyCloud360 and our adapted SkyCloudNet architectures will serve as valuable resources for advancing atmospheric analysis in the spherical domain.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references/bibliography}
+
+\end{document}

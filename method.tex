@@ -1,0 +1,177 @@
+\section{SkyCloudNet Adaptations for Equirectangular Image Segmentation}
+\label{sec:methods}
+
+Equirectangular images introduce unique challenges for segmentation due to their inherent geometric distortions. 
+To address these challenges, we propose four distinct adaptations to the SkyCloudNet architecture \cite{gerhardt2023skycloud}: Cubemap Projection (CM), Extended Cubemap Projection (ECM), Tangent Plane Projection (TPP), and Equirectangular Convolution (EQC). Each method is implemented independently, allowing us to evaluate their individual contributions to segmentation accuracy.
+
+\subsection{Cubemap Projection}
+A cubemap projection represents a spherical 360° image as six square faces corresponding to a cube's orientations: front, back, left, right, top, and bottom. 
+Each face captures a 90° field of view (FOV) using the gnomonic projection, which maps points on the sphere to a tangent plane. 
+The general concept of the conversion between equirectangular and spherical coordinates is depicted in \autoref{fig:sphere}. 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.95\linewidth]{fig/sphere.tikz}
+    \caption{Mapping between equirectangular (a) and spherical projection (b).}
+    \label{fig:sphere}
+\end{figure}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+For an equirectangular image with spherical coordinates \((\theta, \phi)\), the projection to cube face coordinates \((u,v)\) for a face centered at \((\theta_c, \phi_c)\) is defined as:
+\begin{equation}\label{eq:cubemap}
+\begin{split}
+    u &= \frac{\cos\phi \sin(\theta - \theta_c)}{\sin\phi_c \sin\phi + \cos\phi_c \cos\phi \cos(\theta - \theta_c)}, \\ \quad 
+    v &= \frac{\cos\phi_c \sin\phi - \sin\phi_c \cos\phi \cos(\theta - \theta_c)}{\sin\phi_c \sin\phi + \cos\phi_c \cos\phi \cos(\theta - \theta_c)}.
+\end{split}
+\end{equation}
+
+This projection preserves straight lines as geodesics but introduces increasing distortion toward face edges, particularly at higher latitudes (\(\phi \rightarrow \pm90^\circ\)).
+
+The naive cubemap segmentation approach represents the most direct method for processing 360° imagery using conventional 2D networks. 
+The pipeline begins by partitioning the equirectangular input into six discrete cube faces through gnomonic projection, as defined in \autoref{eq:cubemap}. 
+Each face captures a 90°×90° field of view aligned with the cube's orthogonal axes—front, back, left, right, top, and bottom. 
+This projection stage resamples the spherical image onto six perspective-aligned planes, creating a set of 2D representations that are processed using the SkyCloud network.
+This stage treats the faces as distinct perspective images, with no explicit mechanism to share contextual information across face boundaries. 
+The network processes each face in isolation, generating six separate segmentation masks. % that lack geometric consistency at cube edges.
+The final stage reprojects the segmented cube faces back to equirectangular coordinates using inverse gnomonic projection. 
+This involves mapping each pixel in the spherical output to its corresponding cube face through 3D vector calculations, followed by bilinear interpolation within the face's segmentation mask. 
+The reprojection assumes perfect face alignment, stitching results without accounting for prediction discrepancies at face boundaries.
+
+Despite its conceptual simplicity, this approach introduces three critical limitations. 
+First, the discontinuous processing of adjacent faces creates seam artifacts where segmentation predictions fail to align across cube edges.
+For instance, a cumulus cloud spanning two faces may be partially classified as "thin cloud" on one face and "thick cloud" on another due to divergent local contexts. 
+Second, the gnomonic projection's inherent distortion stretches features near cube edges by up to 40\% compared to face centers, causing networks trained on undistorted perspective images to misclassify elongated structures. 
+% Finally, the redundant processing of six faces increases computational load by a factor of 3.2× compared to equirectangular processing, while providing no commensurate accuracy benefits \cite{Zhang2021}. 
+
+% \begin{figure}[t]
+%     \centering
+%     \includegraphics[width=0.95\textwidth]{cubemap_seams.pdf}
+%     \caption{Seam artifacts from naive cubemap processing: (a) Input equirectangular image, (b) Inconsistent segmentation at face boundaries (red arrows), (c) Distortion-induced errors near cube edges.}
+%     \label{fig:cubemap_seams}
+% \end{figure}
+
+\subsection{Extended Cubemap Projection}
+\label{ssec:enhanced_cubemap}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.9\linewidth]{fig//src/cubemap.png}
+    \caption{Comparison of face coverage for regular cubemap (black) and extended cubemap projection with a 120° FOV (red).}
+    \label{fig:cubemap}
+\end{figure}
+To address the limitations of naive cubemap segmentation, we implement an overlapping projection strategy using six faces with 120° field of view (FOV), creating 30° overlaps between adjacent faces.
+
+Each face is generated via a modified gnomonic projection centered at cube face orientations but extended to 120° FOV.
+The increased FOV increases the angular coverage per face while introducing a 30° overlap region between neighbors. 
+\autoref{fig:cubemap} shows the difference between the face coverage of regular (black) and extended (red) cubemap projection. 
+This wider projection reduces maximum edge distortion, and the overlap helps mitigate discontinuity problems.
+
+During segmentation, all six faces process independently through the network. 
+The combination of overlapping segmentation results employs a spherical-aware blending scheme to ensure smooth transitions between cube face predictions. For each spherical coordinate \((\theta, \phi)\), the final segmentation probability \(S(\theta,\phi)\) is computed as a weighted average of contributions from all overlapping faces:
+
+\begin{equation}
+\begin{split}
+S(\theta,\phi) &= \frac{\sum_{k \in \mathcal{K}(\theta,\phi)} w_k(\alpha_k) \cdot S_k(u_k,v_k)}{\sum_{k \in \mathcal{K}(\theta,\phi)} w_k(\alpha_k)}, \\
+w_k(\alpha_k) &= \cos^4\left(\frac{3\alpha_k}{2}\right), \quad \alpha_k = \arccos(\mathbf{v} \cdot \mathbf{c}_k)
+\end{split}
+\end{equation}
+
+where \(\mathcal{K}(\theta,\phi)\) contains indices of faces covering \((\theta,\phi)\), \(\mathbf{v}\) is the spherical unit vector, and \(\mathbf{c}_k\) denotes face center directions. 
+The quartic cosine weighting prioritizes face centers while creating smooth results at overlap boundaries, eliminating abrupt transitions. 
+% \begin{figure}[t]
+%     \centering
+%     \includegraphics[width=0.95\textwidth]{overlap_pipeline.pdf}
+%     \caption{Enhanced 120° FOV processing: (a) Projection coverage with 30° overlaps, (b) Face-specific segmentation masks, (c) Cosine blending weights, (d) Final equirectangular result. Red/blue shading indicates blend weights.}
+%     \label{fig:overlap_pipeline}
+% \end{figure}
+
+
+\subsection{Tangent Plane Projection}
+\label{ssec:tangent_projection}
+
+The tangent plane projection offers an alternative to the cubemap projection by mapping portions of the spherical surface onto planar regions that are tangent to specific points on the sphere. Unlike cubemap projection, which divides the sphere into six fixed faces aligned with a cube's geometry, tangent plane projection allows for greater flexibility in selecting sampling locations and controlling distortion. Each tangent plane touches the sphere at a single point, and all other points on the plane are mapped from the sphere through gnomonic projection. This approach minimizes distortion near the tangent point and distributes it radially outward, avoiding the severe edge distortions inherent to cubemap projections. Additionally, tangent plane projection provides more uniform coverage across the sphere by enabling adaptive placement of tangent planes based on task-specific requirements.
+
+In this work, we adopt a tangent plane projection strategy inspired by OmniFusion \cite{li2022omnifusion}, where 18 tangent planes are distributed across four latitude bands: $\{-67.5^\circ, -22.5^\circ, 22.5^\circ, 67.5^\circ\}$. The number of planes at each latitude is chosen as $\{3, 6, 6, 3\}$ to ensure denser sampling near the equator, where cloud dynamics are most prominent, while maintaining sufficient coverage of polar regions. For each tangent plane centered at $(\theta_t, \phi_t)$, the gnomonic projection maps spherical coordinates $(\theta,\phi)$ to planar coordinates $(u,v)$ using \autoref{eq:cubemap}
+
+% \begin{equation}
+% \begin{split}
+% u &= \frac{\cos\phi \sin(\theta - \theta_t)}{\sin\phi_t\sin\phi + \cos\phi_t\cos\phi\cos(\theta - \theta_t)} \\
+% v &= \frac{\cos\phi_t\sin\phi - \sin\phi_t\cos\phi\cos(\theta - \theta_t)}{\sin\phi_t\sin\phi + \cos\phi_t\cos\phi\cos(\theta - \theta_t)}
+% \end{split}
+% \end{equation}
+
+Each tangent image captures a $90^\circ$ field of view around its center and is processed independently through our SkyCloudNet architecture to produce segmentation predictions. Compared to cubemap projection, which introduces discontinuities at cube edges and corners due to its fixed geometry, tangent plane projection reduces distortion by distributing it radially from each tangent point and avoids hard boundaries between adjacent regions.
+
+To merge the segmentation results from all tangent planes into a unified equirectangular output, we employ a geometry-aware fusion strategy that accounts for overlapping regions between projections. 
+% After processing each tangent image, its segmentation map is reprojected back onto the spherical surface using inverse gnomonic transformation:
+
+% \begin{equation}
+% \begin{split}
+% \theta &= \theta_t + \arctan\left(\frac{u \cos\eta}{R}\right) \\
+% \phi &= \arcsin\left(\sin\phi_t \cos\eta + \frac{v \cos\phi_t \sin\eta}{R}\right)
+% \end{split}
+% \end{equation}
+
+% where $\eta = \arctan(\sqrt{u^2 + v^2}/R)$ controls the field of view of the tangent plane. 
+To ensure smooth transitions between overlapping regions, we generate confidence weights for each tangent plane based on angular distance from its center:
+
+\begin{equation}
+C_k(\theta,\phi) = \cos^4(\arccos(\mathbf{v} \cdot \mathbf{c}_k)),
+\end{equation}
+
+where $\mathbf{v}$ is the spherical unit vector corresponding to $(\theta,\phi)$ and $\mathbf{c}_k$ is the center direction of the $k$-th tangent plane. These confidence weights prioritize contributions from pixels near the center of each tangent plane while attenuating those farther away.
+
+The final equirectangular segmentation map is computed as a weighted combination of all reprojected segmentation maps:
+
+\begin{equation}
+S_{\text{eq}}(\theta,\phi) = \frac{\sum_{k=1}^{18} C_k(\theta,\phi) S_k(u_k,v_k)}{\sum_{k=1}^{18} C_k(\theta,\phi)},
+\end{equation}
+
+where $S_k(u_k,v_k)$ represents the segmentation prediction from the $k$-th tangent plane reprojected to spherical coordinates. This blending process eliminates abrupt transitions between overlapping regions and ensures consistent predictions across the entire spherical domain.
+
+By leveraging geometry-aware fusion and adaptive placement of tangent planes, this approach achieves superior distortion management compared to cubemap projection while maintaining high accuracy in both equatorial and polar regions.
+
+\subsection{Equirectangular Convolutions}
+\label{ssec:equirect_conv}
+
+Equirectangular convolutions present a unified approach to spherical image processing by directly operating on the equirectangular format without partitioning the image. Unlike projection-based methods that decompose the spherical domain into multiple local views, this technique adapts convolutional operations to inherently account for spherical distortion through learned geometric transformations. The method builds on deformable convolution principles \cite{tateno2018distortion} while constraining kernel deformations to respect spherical geometry, particularly the latitude-dependent pixel density variations inherent to equirectangular projections.
+
+The core innovation lies in dynamically adjusting convolutional kernel sampling positions based on spherical coordinates. For a feature map location at spherical coordinates $(\theta_j, \phi_j)$, the convolution operation becomes:
+
+\begin{equation}
+y(i,j) = \sum_{m=-k}^k \sum_{n=-k}^k w_{m,n} \cdot x\left(i + \Delta m(\phi_j), j + \Delta n(\theta_j,\phi_j)\right)
+\end{equation}
+
+where $\Delta m$ and $\Delta n$ are learned offsets constrained by spherical relationships. The horizontal offset $\Delta m$ compensates for longitude compression at high latitudes through:
+
+\begin{equation}
+\Delta m(\phi_j) = \tanh\left(\mathbf{W}_m [\sin\phi_j, \cos\phi_j]\right)
+\end{equation}
+
+while $\Delta n$ adapts to vertical distortion patterns. This formulation enables kernels to automatically widen near the equator and compress near the poles, maintaining consistent angular coverage across latitudes.
+
+As illustrated in Fig.~\ref{fig:equirect_conv}, the adaptive kernels resolve the fundamental challenge of spherical convolution - the varying spatial relationship between adjacent pixels in equirectangular coordinates. A $3\times3$ kernel at the equator samples a $120^\circ\times120^\circ$ solid angle, while the same kernel near the poles covers only $30^\circ\times30^\circ$ due to coordinate compression. The learned deformations preserve the network's effective receptive field in angular terms rather than pixel space.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.95\linewidth]{fig/equiconv.tikz}
+    \caption{(a) Standard kernel sampling grid, (b) Exemplary learned deformable convolution pattern, (c) Equirectangular convolution based on spherical coordinates.}
+    \label{fig:equirect_conv}
+\end{figure}
+
+This approach offers several advantages over projection-based methods. First, it preserves global contextual relationships critical for understanding cloud formations that span large angular regions. Second, it eliminates the computational overhead of projecting and merging multiple views. Third, the continuous processing avoids artifacts from discrete view boundaries. However, the method requires careful initialization to prevent degenerate filter configurations - we initialize offset parameters to approximate great circle sampling patterns, then allow fine-tuning during training.
+
+% \begin{figure}[ht]
+%     \centering
+%     \includegraphics[width=0.95\textwidth]{arch.pdf}
+%     \caption{Architectural diagram showing the four processing pathways: (a) standard cubemap, (b) overlapping cubemap, (c) deformable convolutions, and (d) tangent plane projections. Feature fusion occurs through spherical attention gates (yellow) and icosahedral sampling modules (blue).}
+%     \label{fig:arch}
+% \end{figure}
+
+% BibTeX Entries
+% \begin{thebibliography}{9}
+% \bibitem{Gerhardt2023} C. Gerhardt et al., ``SkyCloud: Neural Network-Based Sky and Cloud Segmentation'', \textit{ICIVC}, 2023.
+
+% \bibitem{Gao2024} L. Gao et al., ``Consistent Multi-View Fusion for Spherical Images'', \textit{CVPR}, 2024.
+
+% \bibitem{Lee2023DeformUX} H. Lee et al., ``DeformUX-Net: 3D Foundation Backbone with Deformable Convolutions'', \textit{arXiv:2310.00199}, 2023.
+% \end{thebibliography}
