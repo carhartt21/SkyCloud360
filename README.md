@@ -1,36 +1,164 @@
-# SkyCloud360: Sky and Cloud Segmentation in Equirectangular Images
+# SkyCloudNet360
 
-## Overview
-This repository accompanies the paper *SkyCloud360: Neural Network-Based Sky and Cloud Segmentation in Equirectangular Images*. The paper introduces the **SkyCloud360 dataset**, the first benchmark dataset for sky and cloud segmentation in equirectangular images, alongside adaptations to the **SkyCloudNet architecture** for handling geometric distortions inherent in 360° imagery.
+This repository contains the implementation of **SkyCloud360: Sky and Cloud Segmentation in Equirectangular Images**. It extends the original SkyCloudNet architecture with four geometric adaptation strategies for processing 360° equirectangular images.
 
-### Key Contributions:
-- **SkyCloud360 Dataset**: A collection of 600 high-resolution equirectangular images with dense annotations for terrain, sky, thin clouds, thick clouds, and estimated sun positions. The dataset bridges a critical gap in panoramic atmospheric analysis.
-- **Geometric Adaptations**: Optimized versions of SkyCloudNet leveraging cubemap projections, tangent plane projections, extended cubemaps, and equirectangular convolutions to address spherical distortions.
-- **Comprehensive Evaluation**: Benchmarks of state-of-the-art methods for semantic segmentation and domain adaptation on equirectangular imagery.
+## SkyCloud360 Dataset Examples
 
-The dataset is publicly available at [OSF](https://osf.io/a5ew), enabling researchers to explore new directions in panoramic image analysis.
+Example equirectangular images (left) with their cloud segmentation labels (right) from the SkyCloud360 dataset. Labels: green = terrain, blue = sky, white = thick cloud, gray = thin cloud.
 
----
+![Example 1](figures/examples/img-005_example.png)
+![Example 2](figures/examples/img-042_example.png)
+![Example 3](figures/examples/img-117_example.png)
+![Example 4](figures/examples/img-250_example.png)
 
-## Repository Content
-This repository will include:
-1. **SkyCloudNet Adaptations**: Implementations of geometric processing strategies (cubemaps, tangent planes, equirectangular convolutions).
-2. **Training Scripts**: Code for training SkyCloudNet on the SkyCloud dataset and evaluating it on SkyCloud360.
-3. **Evaluation Metrics**: Tools for calculating pixel accuracy, mIoU, and class-specific performance metrics.
-4. **Visualization Tools**: Scripts for generating qualitative segmentation results.
+## 360° Adaptation Strategies
 
----
+| Mode | Description |
+|------|-------------|
+| **SkyCloudNet-CM** | Standard cubemap: decomposes the equirectangular image into 6 faces (90° FoV), processes each face independently, and reassembles. |
+| **SkyCloudNet-ECM** | Extended cubemap: uses overlapping faces (>90° FoV) with distance-based blending to reduce boundary artifacts. |
+| **SkyCloudNet-TPP** | Tangent plane projection: samples multiple gnomonic projections on the sphere, processes each local perspective patch, and blends with cosine weighting. Achieves the highest accuracy (93.63% sky, 85.46% cloud). |
+| **SkyCloudNet-EQC** | Equirectangular convolutions: replaces standard Conv2d with latitude-adaptive kernels that compensate for horizontal stretching near the poles. Lightweight, in-place modification. |
 
-## Current Status
-The code is currently being finalized and will be updated in the next few weeks. Stay tuned for:
-- Pretrained models for each geometric adaptation.
-- Detailed documentation on how to use the dataset and train/evaluate models.
+## Requirements
+- Python >= 3.8
+- CUDA 10.2+
 
----
+Install dependencies:
+```
+pip install -r requirements.txt
+```
 
-## Dataset Access
-The **SkyCloud360 dataset** can be downloaded from [OSF](https://osf.io/a5ew). It includes:
-- 600 annotated equirectangular images.
-- Labels for terrain, sky, thin clouds, thick clouds, and sun position estimates.
+## Dataset and Weights
+The **SkyCloud** dataset and pretrained weights are available at: https://osf.io/a5ews
 
+The **SkyCloud360** dataset (600 equirectangular images with dense cloud annotations) is also available at the same link.
 
+## Quick Start
+
+1. Download the dataset and update `root_dataset` in `config/config.yaml`.
+2. Download pretrained weights to the `weights/` folder.
+
+### Evaluation
+
+#### Baseline (standard SkyCloudNet)
+```bash
+python3 eval.py --cfg config/config.yaml MODEL.equirect_mode none
+```
+
+#### SkyCloudNet-TPP (Tangent Plane Projection)
+```bash
+python3 eval.py --cfg config/config.yaml MODEL.equirect_mode tpp
+```
+
+#### SkyCloudNet-ECM (Extended Cubemap)
+```bash
+python3 eval.py --cfg config/config.yaml MODEL.equirect_mode ecm
+```
+
+#### SkyCloudNet-EQC (Equirectangular Convolutions)
+```bash
+python3 eval.py --cfg config/config.yaml MODEL.equirect_mode eqc
+```
+
+#### SkyCloudNet-CM (Standard Cubemap)
+```bash
+python3 eval.py --cfg config/config.yaml MODEL.equirect_mode cm
+```
+
+### Training
+
+Training uses a polynomial learning rate schedule (initial LR 0.02, power 0.9), SGD optimizer with momentum 0.9 and weight decay 1e-4. The attribute estimation head is frozen during training (weights from pretrained SkyCloudNet). Data augmentation includes random cropping, horizontal flipping, and resizing.
+
+#### Baseline training
+```bash
+python3 train.py --cfg config/config.yaml MODEL.equirect_mode none
+```
+
+#### Train with Tangent Plane Projection (TPP)
+```bash
+python3 train.py --cfg config/config.yaml MODEL.equirect_mode tpp
+```
+
+#### Train with Equirectangular Convolutions (EQC)
+```bash
+python3 train.py --cfg config/config.yaml MODEL.equirect_mode eqc
+```
+
+#### Train with Extended Cubemap (ECM)
+```bash
+python3 train.py --cfg config/config.yaml MODEL.equirect_mode ecm
+```
+
+#### Train with Standard Cubemap (CM)
+```bash
+python3 train.py --cfg config/config.yaml MODEL.equirect_mode cm
+```
+
+#### Resume training from a checkpoint
+```bash
+python3 train.py --cfg config/config.yaml \
+    TRAIN.start_epoch 10 \
+    MODEL.equirect_mode tpp \
+    TRAIN.optim_data weights/optimizer_state.pth
+```
+
+#### Training with validation
+```bash
+python3 train.py --cfg config/config.yaml \
+    MODEL.equirect_mode tpp \
+    TRAIN.eval True \
+    TRAIN.eval_step 5
+```
+
+## Configuration
+
+All 360° parameters can be set in `config/config.yaml` or via command-line overrides:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MODEL.equirect_mode` | `none` | Adaptation mode: `none`, `cm`, `ecm`, `tpp`, `eqc` |
+| `MODEL.cubemap_face_size` | `256` | Resolution of cubemap faces (CM/ECM) |
+| `MODEL.ecm_overlap` | `0.1` | Overlap fraction for extended cubemap |
+| `MODEL.tpp_patch_size` | `256` | Tangent plane patch resolution |
+| `MODEL.tpp_fov_deg` | `60.0` | Field of view per tangent patch (degrees) |
+| `MODEL.tpp_num_lat` | `4` | Number of latitude bands for TPP sampling |
+| `MODEL.tpp_num_lon` | `8` | Longitude samples per latitude band |
+| `MODEL.eqc_replace_encoder` | `True` | Replace encoder convolutions (EQC) |
+| `MODEL.eqc_replace_decoder` | `True` | Replace decoder convolutions (EQC) |
+
+## Repository Structure
+
+```
+├── model.py              # Original SkyCloudNet architecture
+├── model_360.py          # 360° adaptation wrappers (CM, ECM, TPP, EQC)
+├── equirect_utils.py     # Equirectangular coordinate transforms & projections
+├── equirect_conv.py      # Latitude-adaptive equirectangular convolution
+├── train.py              # Training script with 360° support
+├── eval.py               # Evaluation script with 360° support
+├── data.py               # Dataset loaders
+├── utils.py              # Utility functions (metrics, visualization, etc.)
+├── custom_transforms.py  # Data augmentation transforms
+├── config/
+│   ├── config.yaml       # Main configuration file
+│   └── defaults.py       # Default configuration values
+├── models/               # Backbone architectures (ResNet, MobileNet)
+└── weights/              # Pretrained model weights
+```
+
+## Citation
+
+If you use this code or dataset in your research, please cite:
+
+```bibtex
+@INPROCEEDINGS{11200399,
+  author={Gerhardt, Christoph and Broll, Wolfgang},
+  booktitle={2025 10th International Conference on Image, Vision and Computing (ICIVC)}, 
+  title={SkyCloud360: Sky and Cloud Segmentation in Equirectangular Images}, 
+  year={2025},
+  volume={},
+  number={},
+  pages={48-58},
+  keywords={Image analysis;Clouds;Semantic segmentation;Image edge detection;Neural networks;Weather forecasting;Solar energy;Semisupervised learning;Distortion;Monitoring;Semantic segmentation;scene understanding;image analysis;neural networks;datasets},
+  doi={10.1109/ICIVC66358.2025.11200399}}
+```
