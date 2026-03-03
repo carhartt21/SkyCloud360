@@ -2,7 +2,14 @@
 
 This repository contains the implementation of **SkyCloud360: Sky and Cloud Segmentation in Equirectangular Images**. It extends the original SkyCloudNet architecture with four geometric adaptation strategies for processing 360° equirectangular images.
 
-![cloudseg_example_2](https://user-images.githubusercontent.com/24622304/187810011-82a2c390-9074-4d8f-92e3-6b350c29d566.png)
+## SkyCloud360 Dataset Examples
+
+Example equirectangular images (left) with their cloud segmentation labels (right) from the SkyCloud360 dataset. Labels: green = terrain, blue = sky, white = thick cloud, gray = thin cloud.
+
+![Example 1](figures/examples/img-005_example.png)
+![Example 2](figures/examples/img-042_example.png)
+![Example 3](figures/examples/img-117_example.png)
+![Example 4](figures/examples/img-250_example.png)
 
 ## 360° Adaptation Strategies
 
@@ -23,9 +30,9 @@ pip install -r requirements.txt
 ```
 
 ## Dataset and Weights
-The **SkyCloud** dataset and pretrained weights are available at: https://osf.io/y69ah/?view_only=889215916ccb4c52a5971fffc6af0dda
+The **SkyCloud** dataset and pretrained weights are available at: https://osf.io/a5ews
 
-The **SkyCloud360** dataset (600 equirectangular images) is also available at the same link.
+The **SkyCloud360** dataset (600 equirectangular images with dense cloud annotations) is also available at the same link.
 
 ## Quick Start
 
